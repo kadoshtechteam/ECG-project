@@ -125,16 +125,25 @@ class _SplashScreenState extends State<SplashScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'MLHADP',
+                      'ML Based ECG',
                       style: theme.textTheme.headlineMedium?.copyWith(
                         color: onPrimary,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
+                        letterSpacing: 0.6,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Heart monitoring, signal capture, and prediction setup in one flow.',
+                      'Monitoring System',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: onPrimary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Machine-learning ECG capture, device setup, and analysis in one guided flow.',
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: onPrimary.withValues(alpha: 0.82),
                         height: 1.45,

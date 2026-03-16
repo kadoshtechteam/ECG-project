@@ -1,11 +1,11 @@
 {
-    "name": "ecg_mobile",
-    "short_name": "ecg_mobile",
+    "name": "ML Based ECG Monitoring System",
+    "short_name": "ML ECG",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "ECG-based Heart Condition Prediction App",
+    "description": "ML Based ECG Monitoring System",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

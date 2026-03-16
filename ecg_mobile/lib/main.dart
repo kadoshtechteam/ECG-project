@@ -36,7 +36,7 @@ class ECGMobileApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => ECGProvider()),
       ],
       child: MaterialApp(
-        title: 'MLHADP',
+        title: 'ML Based ECG Monitoring System',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,

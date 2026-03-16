@@ -23,7 +23,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
     <application
-        android:label="ECG Heart Monitor"
+        android:label="ML Based ECG Monitoring System"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
