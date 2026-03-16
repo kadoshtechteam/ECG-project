@@ -261,11 +261,11 @@ void updateSignalState() {
 }
 
 void refreshDisplay() {
-  if (!leadsAttached) {
+  if (recordingEnabled && !leadsAttached) {
     const String lineOne =
         displayFrame == 0 ? "Smart ECG Device" : "Device IP";
     const String lineTwo =
-        displayFrame == 0 ? "Attach leads" : apAddress.toString();
+        displayFrame == 0 ? "Connect leads" : apAddress.toString();
     updateDisplayPage(0, 2, kLeadScreenHoldMs, lineOne, lineTwo);
     return;
   }
