@@ -13,11 +13,12 @@ const uint8_t kLeadNegativePin = D6;
 const uint8_t kSignalPin = A0;
 const unsigned long kSampleIntervalMs = 8;
 const unsigned long kSerialRefreshMs = 1200;
-const unsigned long kLeadScreenHoldMs = 2800;
-const unsigned long kReadyScreenHoldMs = 2600;
-const unsigned long kRecordingScreenHoldMs = 2200;
+const unsigned long kLeadScreenHoldMs = 3200;
+const unsigned long kReadyScreenHoldMs = 3400;
+const unsigned long kRecordingScreenHoldMs = 2600;
 const unsigned long kStartupIpHoldMs = 3800;
-const unsigned long kLeadScrollStepMs = 320;
+const unsigned long kLeadScrollStepMs = 520;
+const unsigned long kLeadDebounceMs = 650;
 const char* kLeadScrollMessage =
     "Check if leads are attached and all probes are connected to user.  ";
 
@@ -30,28 +31,49 @@ int latestSample = 0;
 int baselineSample = 512;
 bool leadsAttached = false;
 bool recordingEnabled = false;
+bool lastRawLeadsAttached = false;
 unsigned long lastSampleAt = 0;
 unsigned long lastDisplayAt = 0;
 unsigned long lastSerialAt = 0;
 unsigned long lastLeadScrollAt = 0;
+unsigned long lastLeadStateChangeAt = 0;
 uint8_t displayFrame = 0;
 uint8_t leadScrollOffset = 0;
 int displayMode = -1;
+String currentDisplayLineOne = "";
+String currentDisplayLineTwo = "";
 
 String jsonBool(bool value) {
   return value ? "true" : "false";
 }
 
 String clampLine(const String& value) {
-  return value.substring(0, min((int)value.length(), 16));
+  String padded = value;
+  if (padded.length() > 16) {
+    return padded.substring(0, 16);
+  }
+  while (padded.length() < 16) {
+    padded += ' ';
+  }
+  return padded;
 }
 
-void showScreen(const String& lineOne, const String& lineTwo) {
-  lcd.clear();
+void showScreen(const String& lineOne, const String& lineTwo, bool force = false) {
+  const String nextLineOne = clampLine(lineOne);
+  const String nextLineTwo = clampLine(lineTwo);
+
+  if (!force && nextLineOne == currentDisplayLineOne &&
+      nextLineTwo == currentDisplayLineTwo) {
+    return;
+  }
+
   lcd.setCursor(0, 0);
-  lcd.print(clampLine(lineOne));
+  lcd.print(nextLineOne);
   lcd.setCursor(0, 1);
-  lcd.print(clampLine(lineTwo));
+  lcd.print(nextLineTwo);
+
+  currentDisplayLineOne = nextLineOne;
+  currentDisplayLineTwo = nextLineTwo;
 }
 
 void playStartupAnimation() {
@@ -63,17 +85,17 @@ void playStartupAnimation() {
       "[============= ]",
       "[==============]"};
 
-  showScreen("Smart ECG Device", "Initializing");
+  showScreen("Smart ECG Device", "Initializing", true);
   delay(500);
 
   for (uint8_t i = 0; i < 6; i++) {
-    showScreen("Smart ECG Device", bootFrames[i]);
+    showScreen("Smart ECG Device", bootFrames[i], true);
     delay(180);
   }
 
-  showScreen("Checking Leads", "Hold steady...");
+  showScreen("Checking Leads", "Hold steady...", true);
   delay(450);
-  showScreen("Starting Wi-Fi", "SoftAP Ready");
+  showScreen("Starting Wi-Fi", "SoftAP Ready", true);
   delay(450);
 }
 
@@ -227,7 +249,7 @@ void printStartupInstructions() {
 }
 
 void showStartupIpScreen() {
-  showScreen("Smart ECG Device", apAddress.toString());
+  showScreen("Smart ECG Device", apAddress.toString(), true);
   delay(kStartupIpHoldMs);
 }
 
@@ -264,8 +286,17 @@ void updateDisplayPage(
 void updateSignalState() {
   const bool leadPositiveOff = digitalRead(kLeadPositivePin) == HIGH;
   const bool leadNegativeOff = digitalRead(kLeadNegativePin) == HIGH;
+  const bool rawLeadsAttached = !leadPositiveOff && !leadNegativeOff;
 
-  leadsAttached = !leadPositiveOff && !leadNegativeOff;
+  if (rawLeadsAttached != lastRawLeadsAttached) {
+    lastRawLeadsAttached = rawLeadsAttached;
+    lastLeadStateChangeAt = millis();
+  }
+
+  if (rawLeadsAttached != leadsAttached &&
+      millis() - lastLeadStateChangeAt >= kLeadDebounceMs) {
+    leadsAttached = rawLeadsAttached;
+  }
 
   if (leadsAttached) {
     latestSample = analogRead(kSignalPin);
@@ -281,7 +312,7 @@ void refreshDisplay() {
       displayMode = 0;
       displayFrame = 0;
       leadScrollOffset = 0;
-      lastLeadScrollAt = 0;
+      lastLeadScrollAt = millis();
     }
 
     if (millis() - lastLeadScrollAt >= kLeadScrollStepMs) {
