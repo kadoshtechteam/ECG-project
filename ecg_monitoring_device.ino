@@ -17,6 +17,9 @@ const unsigned long kLeadScreenHoldMs = 2800;
 const unsigned long kReadyScreenHoldMs = 2600;
 const unsigned long kRecordingScreenHoldMs = 2200;
 const unsigned long kStartupIpHoldMs = 3800;
+const unsigned long kLeadScrollStepMs = 320;
+const char* kLeadScrollMessage =
+    "Check if leads are attached and all probes are connected to user.  ";
 
 const IPAddress kAccessPointIp(192, 168, 4, 1);
 const IPAddress kGatewayIp(192, 168, 4, 1);
@@ -30,7 +33,9 @@ bool recordingEnabled = false;
 unsigned long lastSampleAt = 0;
 unsigned long lastDisplayAt = 0;
 unsigned long lastSerialAt = 0;
+unsigned long lastLeadScrollAt = 0;
 uint8_t displayFrame = 0;
+uint8_t leadScrollOffset = 0;
 int displayMode = -1;
 
 String jsonBool(bool value) {
@@ -226,6 +231,16 @@ void showStartupIpScreen() {
   delay(kStartupIpHoldMs);
 }
 
+String buildScrollingLine(const String& text, uint8_t offset) {
+  String padded = text;
+  while (padded.length() < 16) {
+    padded += ' ';
+  }
+
+  const String looped = padded + padded;
+  return looped.substring(offset, offset + 16);
+}
+
 void updateDisplayPage(
     int nextMode,
     uint8_t totalPages,
@@ -262,11 +277,22 @@ void updateSignalState() {
 
 void refreshDisplay() {
   if (recordingEnabled && !leadsAttached) {
-    const String lineOne =
-        displayFrame == 0 ? "Smart ECG Device" : "Device IP";
-    const String lineTwo =
-        displayFrame == 0 ? "Connect leads" : apAddress.toString();
-    updateDisplayPage(0, 2, kLeadScreenHoldMs, lineOne, lineTwo);
+    if (displayMode != 0) {
+      displayMode = 0;
+      displayFrame = 0;
+      leadScrollOffset = 0;
+      lastLeadScrollAt = 0;
+    }
+
+    if (millis() - lastLeadScrollAt >= kLeadScrollStepMs) {
+      lastLeadScrollAt = millis();
+      const uint8_t messageLength = String(kLeadScrollMessage).length();
+      leadScrollOffset = (leadScrollOffset + 1) % messageLength;
+    }
+
+    showScreen(
+        "Smart ECG Device",
+        buildScrollingLine(String(kLeadScrollMessage), leadScrollOffset));
     return;
   }
 
