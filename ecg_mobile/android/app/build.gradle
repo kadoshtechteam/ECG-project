@@ -46,7 +46,7 @@ android {
 
     defaultConfig {
         applicationId "com.ecgmobile.ecg_mobile"
-        minSdkVersion 21  // Required for TensorFlow Lite
+        minSdkVersion flutter.minSdkVersion  // Required for TensorFlow Lite
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

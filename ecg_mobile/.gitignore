@@ -104,3 +104,8 @@ windows/.generated/
 ml.ipynb
 nul
 plan.md
+
+# Local datasets should stay out of Git.
+dataset/*
+!dataset/.gitignore
+!dataset/README.md

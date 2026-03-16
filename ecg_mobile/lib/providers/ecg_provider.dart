@@ -44,6 +44,9 @@ class ECGProvider with ChangeNotifier {
   bool get isConnectedToNodeMCU => _isConnectedToNodeMCU;
   bool get isRecordingLive => _isRecordingLive;
   String get nodeMCUStatus => _nodeMCUStatus;
+  String get nodeMCUIP => _nodeMCUService.nodeMCUIP;
+  int get nodeMCUPort => _nodeMCUService.nodeMCUPort;
+  String get nodeMCUDataEndpoint => _nodeMCUService.activeDataEndpoint;
   List<double> get liveECGData => _liveECGData;
   Prediction? get lastPrediction => _lastPrediction;
   double? get persistedLiveHeartRate => _persistedLiveHeartRate;
@@ -83,6 +86,7 @@ class ECGProvider with ChangeNotifier {
 
     // Test the ML model on initialization
     _testMLModel();
+    unawaited(loadNodeMCUConfiguration());
   }
 
   /// Test the ML model to ensure it's working correctly
@@ -110,8 +114,14 @@ class ECGProvider with ChangeNotifier {
   }
 
   // UI Methods
-  void setNodeMCUParameters(String ip, int port) {
-    _nodeMCUService.setConnectionParameters(ip, port);
+  Future<void> loadNodeMCUConfiguration() async {
+    await _nodeMCUService.restoreSavedConnectionParameters();
+    notifyListeners();
+  }
+
+  Future<void> setNodeMCUParameters(String ip, int port) async {
+    await _nodeMCUService.setConnectionParameters(ip, port);
+    notifyListeners();
   }
 
   Future<void> testNodeMCUConnection() async {

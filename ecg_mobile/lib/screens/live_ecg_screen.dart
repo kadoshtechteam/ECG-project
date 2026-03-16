@@ -38,8 +38,15 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
   @override
   void initState() {
     super.initState();
-    // Check if we should start in manual mode
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ecgProvider = context.read<ECGProvider>();
+      ecgProvider.loadNodeMCUConfiguration().then((_) {
+        if (!mounted) {
+          return;
+        }
+        _syncConnectionControllers(ecgProvider);
+      });
+
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null && args['startInManualMode'] == true) {
@@ -60,8 +67,55 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
 
   void _clearLiveData(ECGProvider ecgProvider) {
     debugPrint('Live ECG Screen: User manually clearing live data');
-    // Only clear the data, preserve the sufficient data flag if data was already collected
     ecgProvider.clearLiveData();
+  }
+
+  void _syncConnectionControllers(ECGProvider ecgProvider) {
+    _ipController.text = ecgProvider.nodeMCUIP;
+    _portController.text = ecgProvider.nodeMCUPort.toString();
+  }
+
+  void _showFeedback(String message, {Color? color}) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+      ),
+    );
+  }
+
+  Future<bool> _saveConnectionSettings(
+    ECGProvider ecgProvider, {
+    bool showFeedback = true,
+  }) async {
+    final ip = _ipController.text.trim();
+    final parsedPort = int.tryParse(_portController.text.trim());
+
+    if (ip.isEmpty) {
+      _showFeedback('Enter the ECG device IP address first.',
+          color: Colors.red);
+      return false;
+    }
+
+    if (parsedPort == null || parsedPort < 1 || parsedPort > 65535) {
+      _showFeedback(
+        'Use a valid port between 1 and 65535. Port 80 is the recommended default.',
+        color: Colors.red,
+      );
+      return false;
+    }
+
+    await ecgProvider.setNodeMCUParameters(ip, parsedPort);
+
+    if (showFeedback) {
+      _showFeedback('Connection target saved for $ip:$parsedPort');
+    }
+
+    return true;
   }
 
   String _getCurrentBPMText(ECGProvider ecgProvider) {
@@ -207,35 +261,116 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
   Widget _buildSettingsPanel(ECGProvider ecgProvider) {
     return Container(
       margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+        gradient: LinearGradient(
+          colors: [Colors.white, const Color(0xFFFFF3F7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF5BDD1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'NodeMCU ECG Monitor Settings',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE91E63).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.router_rounded,
+                  color: Color(0xFFE91E63),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ECG Device Setup',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Use this guided setup before you start a live ECG recording.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue[200]!),
-            ),
-            child: const Text(
-              '📶 Instructions:\n'
-              '1. Upload the ECG sensor code to your NodeMCU\n'
-              '2. Connect to "ECG Monitor" WiFi (Password: 12341234)\n'
-              '3. Use IP: 192.168.4.1 (default AP mode)\n'
-              '4. Attach ECG electrodes before starting',
-              style: TextStyle(fontSize: 12, color: Colors.blue),
-            ),
+          const SizedBox(height: 18),
+          _buildSetupStep(
+            number: '1',
+            title: 'Power and flash the NodeMCU',
+            description:
+                'Upload the updated ECG sketch, then restart the board so it advertises the monitoring hotspot.',
+          ),
+          _buildSetupStep(
+            number: '2',
+            title: 'Join the device Wi-Fi',
+            description:
+                'Connect this phone to "ECG Monitor" using password 12341234 before testing the link.',
+          ),
+          _buildSetupStep(
+            number: '3',
+            title: 'Confirm connection target',
+            description:
+                'Default AP mode is 192.168.4.1 on port 80. The app will auto-detect the proper ECG endpoint after that.',
+          ),
+          _buildSetupStep(
+            number: '4',
+            title: 'Attach electrodes before recording',
+            description:
+                'A disconnected lead keeps the device online, but live ECG capture will stay paused until contact is stable.',
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.tune, size: 18),
+                label: const Text('Use AP Defaults'),
+                onPressed: () {
+                  _ipController.text = '192.168.4.1';
+                  _portController.text = '80';
+                },
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.usb_rounded, size: 18),
+                label: const Text('Port 80'),
+                onPressed: () {
+                  _portController.text = '80';
+                },
+              ),
+              ActionChip(
+                avatar: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Reload Saved'),
+                onPressed: () => _syncConnectionControllers(ecgProvider),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
@@ -274,17 +409,33 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildStatusChip(
+                Icons.language,
+                'http://${ecgProvider.nodeMCUIP}',
+              ),
+              _buildStatusChip(
+                Icons.settings_ethernet,
+                'Port ${ecgProvider.nodeMCUPort}',
+              ),
+              _buildStatusChip(
+                Icons.route,
+                'Endpoint ${ecgProvider.nodeMCUDataEndpoint}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               ElevatedButton.icon(
-                onPressed: () {
-                  ecgProvider.setNodeMCUParameters(
-                    _ipController.text.trim(),
-                    int.tryParse(_portController.text) ?? 80,
-                  );
+                onPressed: () async {
+                  await _saveConnectionSettings(ecgProvider);
                 },
                 icon: const Icon(Icons.save, size: 16),
-                label: const Text('Save'),
+                label: const Text('Save Target'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
@@ -299,10 +450,17 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
                 onPressed: ecgProvider.isLoading
                     ? null
                     : () async {
+                        final saved = await _saveConnectionSettings(
+                          ecgProvider,
+                          showFeedback: false,
+                        );
+                        if (!saved) {
+                          return;
+                        }
                         await ecgProvider.testNodeMCUConnection();
                       },
                 icon: const Icon(Icons.wifi_find, size: 16),
-                label: const Text('Test'),
+                label: const Text('Test Link'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
@@ -313,6 +471,86 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSetupStep({
+    required String number,
+    required String title,
+    required String description,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Color(0xFFE91E63),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: Colors.black54,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFF5BDD1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFFE91E63)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -360,6 +598,25 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
                   ecgProvider.nodeMCUStatus,
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _buildStatusChip(
+                      Icons.language,
+                      ecgProvider.nodeMCUIP,
+                    ),
+                    _buildStatusChip(
+                      Icons.usb_rounded,
+                      'Port ${ecgProvider.nodeMCUPort}',
+                    ),
+                    _buildStatusChip(
+                      Icons.route,
+                      ecgProvider.nodeMCUDataEndpoint,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -405,7 +662,16 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
                       ? null
                       : ecgProvider.isConnectedToNodeMCU
                           ? () => ecgProvider.disconnectFromNodeMCU()
-                          : () => ecgProvider.connectToNodeMCU(),
+                          : () async {
+                              final saved = await _saveConnectionSettings(
+                                ecgProvider,
+                                showFeedback: false,
+                              );
+                              if (!saved) {
+                                return;
+                              }
+                              await ecgProvider.connectToNodeMCU();
+                            },
                   icon: Icon(
                     ecgProvider.isConnectedToNodeMCU ? Icons.close : Icons.wifi,
                     size: 18,
@@ -547,7 +813,7 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
                 child: Column(
                   children: [
                     const Text(
-                      '🔧 Quick Setup:',
+                      'Guided Setup:',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.orange,
@@ -555,9 +821,10 @@ class _LiveECGScreenState extends State<LiveECGScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '1. Connect your phone to the "ECG Monitor" WiFi network.\n'
-                      '2. Tap the settings icon ⚙️ to confirm the IP address.\n'
-                      '3. Press the "Connect" button to begin.',
+                      '1. Flash the updated ECG sketch to the NodeMCU.\n'
+                      '2. Join the "ECG Monitor" Wi-Fi network.\n'
+                      '3. Open settings, confirm IP 192.168.4.1 and port 80.\n'
+                      '4. Press "Test Link", then connect and start recording.',
                       style: TextStyle(fontSize: 12, color: Colors.orange[700]),
                       textAlign: TextAlign.center,
                     ),

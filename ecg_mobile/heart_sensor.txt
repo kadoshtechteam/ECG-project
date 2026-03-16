@@ -1,10 +1,9 @@
 #include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+#include <ESP8266WebServer.h>
 #include <LiquidCrystal_I2C.h>
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
-AsyncWebServer server(80);
+ESP8266WebServer server(80);
 
 const char* kAccessPointName = "ECG Monitor";
 const char* kAccessPointPassword = "12341234";
@@ -99,94 +98,100 @@ String buildSamplePayload() {
          "}";
 }
 
-void sendCommandResponse(
-    AsyncWebServerRequest* request,
-    int statusCode,
-    bool ok,
-    const String& message) {
-  request->send(
+void sendJsonResponse(int statusCode, const String& payload) {
+  server.send(statusCode, "application/json", payload);
+}
+
+void sendCommandResponse(int statusCode, bool ok, const String& message) {
+  sendJsonResponse(
       statusCode,
-      "application/json",
       "{\"ok\":" + jsonBool(ok) + ",\"message\":\"" + message + "\"}");
 }
 
-void handleCommand(AsyncWebServerRequest* request) {
-  if (!request->hasParam("action")) {
-    sendCommandResponse(request, 400, false, "Missing action query parameter");
+void handleRoot() {
+  server.send(
+      200,
+      "text/plain",
+      "ECG Monitor ready\n" + connectionSummary() +
+          "\nUse /health, /ecg and /command?action=start_recording");
+}
+
+void handleHealth() {
+  sendJsonResponse(200, buildHealthPayload());
+}
+
+void handleEcg() {
+  if (!leadsAttached) {
+    sendJsonResponse(
+        503,
+        "{\"status\":\"lead_off\",\"message\":\"Attach ECG leads before recording\"}");
     return;
   }
 
-  const String action = request->getParam("action")->value();
+  sendJsonResponse(200, buildSamplePayload());
+}
+
+void handleLegacySample() {
+  if (!leadsAttached) {
+    server.send(503, "text/plain", "lead_off");
+    return;
+  }
+
+  server.send(200, "text/plain", String(latestSample));
+}
+
+void handleCommand() {
+  if (!server.hasArg("action")) {
+    sendCommandResponse(400, false, "Missing action query parameter");
+    return;
+  }
+
+  const String action = server.arg("action");
 
   if (action == "start_recording") {
     recordingEnabled = true;
-    sendCommandResponse(request, 200, true, "Recording enabled");
+    sendCommandResponse(200, true, "Recording enabled");
     return;
   }
 
   if (action == "stop_recording") {
     recordingEnabled = false;
-    sendCommandResponse(request, 200, true, "Recording stopped");
+    sendCommandResponse(200, true, "Recording stopped");
     return;
   }
 
   if (action == "calibrate") {
+    if (!leadsAttached) {
+      sendCommandResponse(409, false, "Attach leads before calibration");
+      return;
+    }
+
     baselineSample = latestSample;
-    sendCommandResponse(request, 200, true, "Baseline captured");
+    sendCommandResponse(200, true, "Baseline captured");
     return;
   }
 
   if (action == "status") {
-    request->send(200, "application/json", buildHealthPayload());
+    sendJsonResponse(200, buildHealthPayload());
     return;
   }
 
-  sendCommandResponse(request, 400, false, "Unsupported action");
+  sendCommandResponse(400, false, "Unsupported action");
+}
+
+void handleNotFound() {
+  sendJsonResponse(
+      404,
+      "{\"ok\":false,\"message\":\"Unknown endpoint. Use /health, /ecg or /command\"}");
 }
 
 void setupServer() {
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(
-        200,
-        "text/plain",
-        "ECG Monitor ready\n" + connectionSummary() +
-            "\nUse /health, /ecg and /command?action=start_recording");
-  });
-
-  server.on("/health", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(200, "application/json", buildHealthPayload());
-  });
-
-  server.on("/ecg", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (!leadsAttached) {
-      request->send(
-          503,
-          "application/json",
-          "{\"status\":\"lead_off\",\"message\":\"Attach ECG leads before recording\"}");
-      return;
-    }
-
-    request->send(200, "application/json", buildSamplePayload());
-  });
-
-  server.on("/getDustDensity", HTTP_GET, [](AsyncWebServerRequest* request) {
-    if (!leadsAttached) {
-      request->send(503, "text/plain", "lead_off");
-      return;
-    }
-
-    request->send(200, "text/plain", String(latestSample));
-  });
-
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/health", HTTP_GET, handleHealth);
+  server.on("/ecg", HTTP_GET, handleEcg);
+  server.on("/getDustDensity", HTTP_GET, handleLegacySample);
   server.on("/command", HTTP_GET, handleCommand);
-
-  server.onNotFound([](AsyncWebServerRequest* request) {
-    request->send(
-        404,
-        "application/json",
-        "{\"ok\":false,\"message\":\"Unknown endpoint. Use /health, /ecg or /command\"}");
-  });
-
+  server.onNotFound(handleNotFound);
   server.begin();
 }
 
@@ -212,23 +217,6 @@ void printStartupInstructions() {
   Serial.println();
 }
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(kLeadPositivePin, INPUT);
-  pinMode(kLeadNegativePin, INPUT);
-
-  lcd.init();
-  lcd.backlight();
-  playStartupAnimation();
-
-  setupSoftAp();
-  setupServer();
-  printStartupInstructions();
-
-  showScreen("Wi-Fi Ready", apAddress.toString());
-  delay(1200);
-}
-
 void updateSignalState() {
   const bool leadPositiveOff = digitalRead(kLeadPositivePin) == HIGH;
   const bool leadNegativeOff = digitalRead(kLeadNegativePin) == HIGH;
@@ -252,7 +240,8 @@ void refreshDisplay() {
   displayFrame = (displayFrame + 1) % 4;
 
   if (!leadsAttached) {
-    const String lineTwo = displayFrame % 2 == 0 ? "Attach leads" : apAddress.toString();
+    const String lineTwo =
+        displayFrame % 2 == 0 ? "Attach leads" : apAddress.toString();
     showScreen("Lead Check", lineTwo);
     return;
   }
@@ -265,7 +254,8 @@ void refreshDisplay() {
     return;
   }
 
-  const String idleLine = displayFrame % 2 == 0 ? "Port 80 Ready" : "Cmd /command";
+  const String idleLine =
+      displayFrame % 2 == 0 ? "Port 80 Ready" : "Cmd /command";
   showScreen("ECG Ready", idleLine);
 }
 
@@ -285,7 +275,27 @@ void refreshSerialLog() {
   Serial.println(apAddress.toString());
 }
 
+void setup() {
+  Serial.begin(115200);
+  pinMode(kLeadPositivePin, INPUT);
+  pinMode(kLeadNegativePin, INPUT);
+
+  lcd.init();
+  lcd.backlight();
+  playStartupAnimation();
+
+  setupSoftAp();
+  setupServer();
+  updateSignalState();
+  printStartupInstructions();
+
+  showScreen("Wi-Fi Ready", apAddress.toString());
+  delay(1200);
+}
+
 void loop() {
+  server.handleClient();
+
   if (millis() - lastSampleAt >= kSampleIntervalMs) {
     lastSampleAt = millis();
     updateSignalState();
