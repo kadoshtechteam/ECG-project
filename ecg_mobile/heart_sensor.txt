@@ -12,8 +12,11 @@ const uint8_t kLeadPositivePin = D5;
 const uint8_t kLeadNegativePin = D6;
 const uint8_t kSignalPin = A0;
 const unsigned long kSampleIntervalMs = 8;
-const unsigned long kDisplayRefreshMs = 350;
 const unsigned long kSerialRefreshMs = 1200;
+const unsigned long kLeadScreenHoldMs = 2800;
+const unsigned long kReadyScreenHoldMs = 2600;
+const unsigned long kRecordingScreenHoldMs = 2200;
+const unsigned long kStartupIpHoldMs = 3800;
 
 const IPAddress kAccessPointIp(192, 168, 4, 1);
 const IPAddress kGatewayIp(192, 168, 4, 1);
@@ -28,6 +31,7 @@ unsigned long lastSampleAt = 0;
 unsigned long lastDisplayAt = 0;
 unsigned long lastSerialAt = 0;
 uint8_t displayFrame = 0;
+int displayMode = -1;
 
 String jsonBool(bool value) {
   return value ? "true" : "false";
@@ -54,17 +58,17 @@ void playStartupAnimation() {
       "[============= ]",
       "[==============]"};
 
-  showScreen("ECG Monitor", "Initializing");
+  showScreen("Smart ECG Device", "Initializing");
   delay(500);
 
   for (uint8_t i = 0; i < 6; i++) {
-    showScreen("System Startup", bootFrames[i]);
+    showScreen("Smart ECG Device", bootFrames[i]);
     delay(180);
   }
 
   showScreen("Checking Leads", "Hold steady...");
   delay(450);
-  showScreen("Starting Wi-Fi", "SoftAP Mode");
+  showScreen("Starting Wi-Fi", "SoftAP Ready");
   delay(450);
 }
 
@@ -206,7 +210,7 @@ void setupSoftAp() {
 
 void printStartupInstructions() {
   Serial.println();
-  Serial.println(F("=== ECG Monitor Device Ready ==="));
+  Serial.println(F("=== Smart ECG Device Ready ==="));
   Serial.println(connectionSummary());
   Serial.println(F("Health endpoint : http://192.168.4.1/health"));
   Serial.println(F("ECG endpoint    : http://192.168.4.1/ecg"));
@@ -215,6 +219,31 @@ void printStartupInstructions() {
   Serial.println(F("If the app shows lead_off, attach the electrodes and try again."));
   Serial.println(F("================================"));
   Serial.println();
+}
+
+void showStartupIpScreen() {
+  showScreen("Smart ECG Device", apAddress.toString());
+  delay(kStartupIpHoldMs);
+}
+
+void updateDisplayPage(
+    int nextMode,
+    uint8_t totalPages,
+    unsigned long holdMs,
+    const String& lineOne,
+    const String& lineTwo) {
+  const bool modeChanged = displayMode != nextMode;
+  if (modeChanged) {
+    displayMode = nextMode;
+    displayFrame = 0;
+  } else if (millis() - lastDisplayAt < holdMs) {
+    return;
+  } else {
+    displayFrame = (displayFrame + 1) % totalPages;
+  }
+
+  lastDisplayAt = millis();
+  showScreen(lineOne, lineTwo);
 }
 
 void updateSignalState() {
@@ -232,31 +261,36 @@ void updateSignalState() {
 }
 
 void refreshDisplay() {
-  if (millis() - lastDisplayAt < kDisplayRefreshMs) {
-    return;
-  }
-
-  lastDisplayAt = millis();
-  displayFrame = (displayFrame + 1) % 4;
-
   if (!leadsAttached) {
+    const String lineOne =
+        displayFrame == 0 ? "Smart ECG Device" : "Device IP";
     const String lineTwo =
-        displayFrame % 2 == 0 ? "Attach leads" : apAddress.toString();
-    showScreen("Lead Check", lineTwo);
+        displayFrame == 0 ? "Attach leads" : apAddress.toString();
+    updateDisplayPage(0, 2, kLeadScreenHoldMs, lineOne, lineTwo);
     return;
   }
 
   if (recordingEnabled) {
+    const String lineOne = displayFrame == 0 ? "Smart ECG Live" : "Recording...";
     const String lineTwo =
-        displayFrame % 2 == 0 ? "Sample " + String(latestSample)
-                              : "IP " + apAddress.toString();
-    showScreen("Recording Live", lineTwo);
+        displayFrame == 0 ? "Sample " + String(latestSample)
+                          : apAddress.toString();
+    updateDisplayPage(1, 2, kRecordingScreenHoldMs, lineOne, lineTwo);
     return;
   }
 
-  const String idleLine =
-      displayFrame % 2 == 0 ? "Port 80 Ready" : "Cmd /command";
-  showScreen("ECG Ready", idleLine);
+  String lineOne = "Smart ECG Device";
+  String lineTwo = "Ready to record";
+
+  if (displayFrame == 1) {
+    lineOne = "Device IP";
+    lineTwo = apAddress.toString();
+  } else if (displayFrame == 2) {
+    lineOne = "Port 80 Ready";
+    lineTwo = "Cmd /command";
+  }
+
+  updateDisplayPage(2, 3, kReadyScreenHoldMs, lineOne, lineTwo);
 }
 
 void refreshSerialLog() {
@@ -289,8 +323,7 @@ void setup() {
   updateSignalState();
   printStartupInstructions();
 
-  showScreen("Wi-Fi Ready", apAddress.toString());
-  delay(1200);
+  showStartupIpScreen();
 }
 
 void loop() {
