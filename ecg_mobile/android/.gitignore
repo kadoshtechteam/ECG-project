@@ -1,0 +1,32 @@
+# Android specific
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Keystore files - NEVER commit these
+*.keystore
+*.jks
+key.properties
+upload-keystore.jks
+release-keystore.jks
+
+# APK output files
+*.apk
+*.aab
+/app/release/
+/app/build/outputs/
+
+# Signing reports
+/app/build/reports/

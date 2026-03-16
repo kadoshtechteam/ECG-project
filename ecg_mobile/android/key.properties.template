@@ -1,0 +1,17 @@
+# Signing configuration for release APK
+# Copy this file to 'key.properties' and update with your actual keystore details
+# DO NOT commit key.properties to version control
+
+storePassword=your_store_password_here
+keyPassword=your_key_password_here
+keyAlias=your_key_alias_here
+storeFile=../path/to/your/keystore.jks
+
+# To generate a keystore, run:
+# keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+
+# Instructions:
+# 1. Generate a keystore using the command above
+# 2. Copy this file to 'key.properties' 
+# 3. Update the values with your actual keystore details
+# 4. Keep key.properties secure and never commit it to version control 

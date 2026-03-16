@@ -1,0 +1,102 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'dev.flutter.flutter-gradle-plugin'
+}
+
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
+
+def flutterRoot = localProperties.getProperty('flutter.sdk')
+if (flutterRoot == null) {
+    throw new RuntimeException("SDK not found. Define location with flutter.sdk in the local.properties file.")
+}
+
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+android {
+    namespace "com.ecgmobile.ecg_mobile"
+    compileSdkVersion flutter.compileSdkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    defaultConfig {
+        applicationId "com.ecgmobile.ecg_mobile"
+        minSdkVersion 21  // Required for TensorFlow Lite
+        targetSdkVersion flutter.targetSdkVersion
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+    }
+
+    buildTypes {
+        release {
+            // Simple release configuration without signing for now
+            minifyEnabled false
+            shrinkResources false
+            debuggable false
+            zipAlignEnabled true
+        }
+        
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            debuggable true
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
+
+// Post-build task to copy APK to Flutter's expected location
+afterEvaluate {
+    tasks.matching { it.name.startsWith('assemble') }.all { task ->
+        task.doLast {
+            def flutterApkDir = new File("${rootProject.projectDir}/../build/app/outputs/flutter-apk")
+            flutterApkDir.mkdirs()
+            
+            // Copy debug APK
+            def debugApk = new File("${buildDir}/outputs/flutter-apk/app-debug.apk")
+            if (debugApk.exists()) {
+                def targetDebugApk = new File(flutterApkDir, "app-debug.apk")
+                targetDebugApk.bytes = debugApk.bytes
+                println "Copied debug APK to: ${targetDebugApk.absolutePath}"
+            }
+            
+            // Copy release APK
+            def releaseApk = new File("${buildDir}/outputs/flutter-apk/app-release.apk")
+            if (releaseApk.exists()) {
+                def targetReleaseApk = new File(flutterApkDir, "app-release.apk")
+                targetReleaseApk.bytes = releaseApk.bytes
+                println "Copied release APK to: ${targetReleaseApk.absolutePath}"
+            }
+        }
+    }
+} 

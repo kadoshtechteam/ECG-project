@@ -1,0 +1,110 @@
+#include <ESP8266WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include "LittleFS.h"
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const char *ssid = "ECG Monitor";
+const char *password = "12341234";
+const char *serverUrl = "/getDustDensity";
+
+int l011 = D6, l010 = D5, sensorData = 0;
+
+AsyncWebServer server(80);
+
+void setup()
+{
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Initializing...");
+  // initialize the serial communication:
+  Serial.begin(115200);
+  delay(100);
+  pinMode(l010, INPUT); // Setup for leads off detection LO +
+  pinMode(l011, INPUT); // Setup for leads off detection LO -
+
+  // Set up NodeMCU as Access Point
+  WiFi.softAP(ssid, password);
+  Serial.println(WiFi.softAPIP());
+
+  // Mount LittleFS
+  if (!LittleFS.begin())
+  {
+    Serial.println("LittleFS Mount Failed");
+  }
+
+  // Serve HTML file
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+    String htmlFile = "/index.html";
+    if (LittleFS.exists(htmlFile)) {
+      AsyncWebServerResponse *response = request->beginResponse(LittleFS, htmlFile, "text/html");
+      request->send(response);
+    } else {
+      request->send(404, "text/plain", "File not found");
+    } });
+
+  server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+    String chart = "/script.js";
+    if (LittleFS.exists(chart)) {
+      AsyncWebServerResponse *response = request->beginResponse(LittleFS, chart, "text/html");
+      request->send(response);
+    } else {
+      request->send(404, "text/plain", "File not found");
+    } });
+
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+String cssFile = "/style.css";
+if (LittleFS.exists(cssFile)) {
+AsyncWebServerResponse *response = request->beginResponse(LittleFS, cssFile, "text/css");
+request->send(response);
+} else {
+request->send(404, "text/plain", "File not found");
+} });
+
+  server.on(serverUrl, HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+      
+      // Send a response back to the client
+      request->send(200, "text/plain", String(sensorData)); });
+
+  server.begin();
+  Serial.println("Starting...");
+  for (size_t i = 0; i < 4; i++)
+  {
+    delay(500);
+    lcd.print(".");
+  }
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("ECG Monitor");
+}
+void loop()
+{
+  Serial.println("Reading leads...");
+  int lead0 = digitalRead(l010);
+  int lead1 = digitalRead(l011);
+  Serial.print("l010: ");
+  Serial.print(lead0);
+  Serial.print(" l011: ");
+  Serial.println(lead1);
+
+  if (lead0 == 1 || lead1 == 1)
+  {
+    Serial.println("Leads off!");
+  }
+  else
+  {
+    Serial.println("Reading A0...");
+    sensorData = analogRead(A0);
+    Serial.print("A0: ");
+    Serial.println(sensorData);
+  }
+
+  delay(50);
+}
