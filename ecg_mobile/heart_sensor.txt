@@ -305,18 +305,34 @@ void refreshDisplay() {
     return;
   }
 
+  if (leadsAttached) {
+    String lineOne = "Probes Ready";
+    String lineTwo = "Sample " + String(latestSample);
+
+    if (displayFrame == 1) {
+      lineOne = "Open mobile app";
+      lineTwo = "Start live test";
+    } else if (displayFrame == 2) {
+      lineOne = "Device IP";
+      lineTwo = apAddress.toString();
+    }
+
+    updateDisplayPage(2, 3, kReadyScreenHoldMs, lineOne, lineTwo);
+    return;
+  }
+
   String lineOne = "Smart ECG Device";
-  String lineTwo = "Ready to record";
+  String lineTwo = "Ready for setup";
 
   if (displayFrame == 1) {
     lineOne = "Device IP";
     lineTwo = apAddress.toString();
   } else if (displayFrame == 2) {
     lineOne = "Port 80 Ready";
-    lineTwo = "Cmd /command";
+    lineTwo = "Open mobile app";
   }
 
-  updateDisplayPage(2, 3, kReadyScreenHoldMs, lineOne, lineTwo);
+  updateDisplayPage(3, 3, kReadyScreenHoldMs, lineOne, lineTwo);
 }
 
 void refreshSerialLog() {
